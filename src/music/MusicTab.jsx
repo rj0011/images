@@ -4,14 +4,8 @@ import { usePlayer, playQueue, playNext, addToQueue, current } from './player'
 import { useThumb, fmtTime, useBack, searchMatch } from '../lib/util'
 import { Empty, Seg, Btn } from '../components/ui'
 
-export function Cover({ it, size = 48, round = 'rounded-xl', className = '' }) {
-  const u = useThumb(it?.id, !!it?.hasThumb)
-  return (
-    <span className={`relative grid shrink-0 place-items-center overflow-hidden bg-gradient-to-br from-violet-500/30 to-pink-500/20 ${round} ${className}`} style={{ width: size, height: size }}>
-      {u ? <img src={u} alt="" className="h-full w-full object-cover" /> : <Music2 size={typeof size === 'number' ? size * 0.42 : 40} className="text-white/60" />}
-    </span>
-  )
-}
+export { Cover } from './Mini'
+import { Cover } from './Mini'
 export const Bars = ({ on }) => (
   <span className="flex h-4 items-end gap-[2px]">
     {[0, 1, 2].map((i) => <span key={i} className="w-[3px] rounded-sm bg-[var(--ac2)]" style={{ height: on ? undefined : '35%', animation: on ? `eqb .${7 + i}s ease-in-out ${i * 0.1}s infinite alternate` : 'none' }} />)}

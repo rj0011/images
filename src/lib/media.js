@@ -60,7 +60,7 @@ function readTiff(v, t) {
       if (map[tag]) out[map[tag]] = val(e)
     }
   }
-  ifd(t + u32(t + 4), { 0x010f: 'make', 0x0110: 'model', 0x0132: 'dateTime', 0x8769: '_exif', 0x8825: '_gps' })
+  ifd(t + u32(t + 4), { 0x010f: 'make', 0x0110: 'model', 0x0112: 'orientation', 0x0132: 'dateTime', 0x8769: '_exif', 0x8825: '_gps' })
   if (out._exif) ifd(t + out._exif, { 0x9003: 'dateTaken', 0x829a: 'exposure', 0x829d: 'fNumber', 0x8827: 'iso', 0x920a: 'focal', 0xa434: 'lens', 0x9209: 'flash' })
   if (out._gps) {
     const g = {}
@@ -79,6 +79,32 @@ function readTiff(v, t) {
 export function exifDate(s) {
   const m = /^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/.exec(s || '')
   return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null
+}
+
+
+// ---------- read image size from file header (no full decode = much faster) ----------
+export function headerDims(buf) {
+  try {
+    const v = new DataView(buf), b = new Uint8Array(buf)
+    if (v.getUint32(0) === 0x89504e47) return { w: v.getUint32(16), h: v.getUint32(20) } // PNG
+    if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return { w: v.getUint16(6, true), h: v.getUint16(8, true) } // GIF
+    if (v.getUint32(0) === 0x52494646 && v.getUint32(8) === 0x57454250) { // WEBP
+      const t = String.fromCharCode(b[12], b[13], b[14], b[15])
+      if (t === 'VP8 ') return { w: v.getUint16(26, true) & 0x3fff, h: v.getUint16(28, true) & 0x3fff }
+      if (t === 'VP8L') { const n = v.getUint32(21, true); return { w: (n & 0x3fff) + 1, h: ((n >> 14) & 0x3fff) + 1 } }
+      if (t === 'VP8X') return { w: 1 + (b[24] | (b[25] << 8) | (b[26] << 16)), h: 1 + (b[27] | (b[28] << 8) | (b[29] << 16)) }
+    }
+    if (v.getUint16(0) === 0xffd8) { // JPEG: find SOFn marker
+      let o = 2
+      while (o < b.length - 9) {
+        if (b[o] !== 0xff) { o++; continue }
+        const m = b[o + 1]
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { h: v.getUint16(o + 5), w: v.getUint16(o + 7) }
+        o += 2 + v.getUint16(o + 2)
+      }
+    }
+  } catch { /* ignore */ }
+  return null
 }
 
 // ---------- ID3 (mp3 tags + cover art) ----------
@@ -178,15 +204,27 @@ export async function analyse(file, kind) {
   const meta = {}
   let thumb = null
   if (kind === 'photo') {
+    const head = await file.slice(0, 256 * 1024).arrayBuffer()
     if (/jpe?g/i.test(file.type) || /\.jpe?g$/i.test(file.name)) {
-      const ex = parseExif(await file.slice(0, 256 * 1024).arrayBuffer())
+      const ex = parseExif(head)
       if (ex) { meta.exif = ex; meta.date = exifDate(ex.dateTaken || ex.dateTime) }
     }
+    const d = headerDims(head)
     try {
-      const bmp = await createImageBitmap(file)
-      meta.w = bmp.width; meta.h = bmp.height
-      thumb = await drawThumb(bmp, bmp.width, bmp.height)
-      bmp.close?.()
+      if (d && d.w && d.h) {
+        const rot = meta.exif?.orientation >= 5
+        meta.w = rot ? d.h : d.w; meta.h = rot ? d.w : d.h
+        // decode straight to thumbnail size — far faster for big camera photos
+        const k = Math.min(1, 320 / Math.min(meta.w, meta.h))
+        const bmp = await createImageBitmap(file, { resizeWidth: Math.max(1, Math.round(d.w * k)), resizeQuality: 'medium' })
+        thumb = await drawThumb(bmp, bmp.width, bmp.height)
+        bmp.close?.()
+      } else {
+        const bmp = await createImageBitmap(file)
+        meta.w = bmp.width; meta.h = bmp.height
+        thumb = await drawThumb(bmp, bmp.width, bmp.height)
+        bmp.close?.()
+      }
     } catch { meta.broken = true }
   } else if (kind === 'video') {
     try { const i = await videoInfo(file); meta.w = i.w; meta.h = i.h; meta.dur = i.dur; thumb = i.thumb || null } catch { meta.broken = true }
@@ -244,7 +282,7 @@ export async function importFiles(files, { existing = [], onProgress, folderAlbu
       onProgress?.(done, done + list.length)
     }
   }
-  await Promise.all([worker(), worker()])
+  await Promise.all([worker(), worker(), worker()])
   return { items: out, folders, skipped: files.length - out.length }
 }
 

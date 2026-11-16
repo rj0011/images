@@ -3,6 +3,7 @@ import { Search, X, Plus, Grid3x3, Images, FolderPlus, Upload } from 'lucide-rea
 import MediaGrid from './Grid'
 import { searchMatch, useBack } from '../lib/util'
 import { Empty, Btn } from './ui'
+import InstallCard from './InstallCard'
 
 const FILTERS = [['all', 'All'], ['photo', 'Photos'], ['video', 'Videos'], ['fav', 'Favourites']]
 
@@ -46,6 +47,7 @@ export default function PhotosTab({ app, selected, setSelected, cols, setCols })
         )}
       </div>
 
+      <InstallCard compact />
       {!app.visual.length ? (
         <Empty icon={Images} title="Welcome to Images ✨" sub="Add photos & videos from your phone. They are copied into the app's private storage and work fully offline.">
           <div className="flex flex-col gap-2">

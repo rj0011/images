@@ -5,18 +5,21 @@ import { importFiles as runImport, deleteForever, shareItems, downloadItems, tak
 import { getLock } from './lib/lock'
 import { Toaster, Dialogs, toast, ask, Empty } from './components/ui'
 import PhotosTab from './components/Photos'
-import AlbumsTab from './components/Albums'
-import MoreTab, { ACCENTS } from './components/More'
+import { ACCENTS } from './lib/theme'
 import Collection, { SelectBar } from './components/Collection'
 import { useBack } from './lib/util'
-import { LockScreen, LockSettings } from './components/Lock'
-import MusicTab from './music/MusicTab'
-import { MiniPlayer, FullPlayer } from './music/NowPlaying'
+import { LockScreen } from './components/Lock'
+import { MiniPlayer } from './music/Mini'
 import * as player from './music/player'
 
 const Viewer = lazy(() => import('./components/Viewer'))
 const VideoPlayer = lazy(() => import('./components/VideoPlayer'))
 const Editor = lazy(() => import('./components/Editor'))
+const AlbumsTab = lazy(() => import('./components/Albums'))
+const MoreTab = lazy(() => import('./components/More'))
+const MusicTab = lazy(() => import('./music/MusicTab'))
+const FullPlayer = lazy(() => import('./music/NowPlaying').then((m) => ({ default: m.FullPlayer })))
+const LockSettings = lazy(() => import('./components/Lock').then((m) => ({ default: m.LockSettings })))
 
 const DEFAULTS = { accent: 'aurora', amoled: false, cols: 4, resume: true, autoNext: true, videoSpeed: 1 }
 const MONTH = 30 * 86400000
@@ -302,7 +305,7 @@ export default function App() {
       {!ready ? (
         <div className="grid h-screen place-items-center"><img src="./pwa-192.png" alt="" className="h-20 w-20 animate-pulse rounded-3xl" /></div>
       ) : (
-        <main>
+        <main><Suspense fallback={<div className="grid h-[60vh] place-items-center"><span className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-[var(--ac2)]" /></div>}>
           {tab === 'photos' && <PhotosTab app={app} selected={selected} setSelected={setSelected} cols={cols} setCols={setCols} />}
           {tab === 'albums' && (
             <div className="safe-t">
@@ -320,7 +323,7 @@ export default function App() {
             </div>
           )}
           {tab === 'more' && <MoreTab app={app} />}
-        </main>
+        </Suspense></main>
       )}
 
       {tab !== 'more' && !selecting && <MiniPlayer onOpen={() => setFull(true)} />}
@@ -349,12 +352,12 @@ export default function App() {
         {editing && <Editor item={editing} onClose={() => setEditing(null)} onSave={saveEdited} />}
       </Suspense>
 
-      <FullPlayer open={full} onClose={() => setFull(false)} app={app} />
+      {full && <Suspense fallback={null}><FullPlayer open={full} onClose={() => setFull(false)} app={app} /></Suspense>}
 
       {vaultGate && <div className="fixed inset-0 z-[120]"><LockScreen title="Vault" sub="Draw pattern to open Vault" onCancel={() => setVaultGate(false)}
         onUnlock={() => { setVaultGate(false); setColl({ type: 'vault' }) }} onForgot={purgeVault} /></div>}
-      <LockSettings open={!!lockSheet} onClose={() => setLockSheet(null)} flash={toast} startDraw={lockSheet?.startDraw}
-        onSet={() => { const t = lockSheet?.then; if (t) { setLockSheet(null); setTimeout(t, 50) } }} />
+      {lockSheet && <Suspense fallback={null}><LockSettings open={!!lockSheet} onClose={() => setLockSheet(null)} flash={toast} startDraw={lockSheet?.startDraw}
+        onSet={() => { const t = lockSheet?.then; if (t) { setLockSheet(null); setTimeout(t, 50) } }} /></Suspense>}
 
       {imp && (
         <div className="fixed inset-x-4 top-4 z-[90] rounded-2xl glass p-3 ring-1 ring-white/10 shadow-2xl safe-t anim-pop">
